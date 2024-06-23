@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use self::error::ClientError;
 
-mod error;
+pub mod error;
 
 pub struct UnityClient {
     client: Client,

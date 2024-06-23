@@ -1,5 +1,6 @@
-use self::client::error::ClientError;
+use crate::client::error::ClientError;
 
+#[derive(Debug)]
 pub struct UnityError {}
 
 impl From<ClientError> for UnityError {

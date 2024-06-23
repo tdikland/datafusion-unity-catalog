@@ -16,6 +16,7 @@ mod catalog;
 pub mod error;
 mod schema;
 pub mod unity;
+pub mod table;
 
 pub struct Unity {
     client: Arc<UnityClient>,
@@ -68,7 +69,7 @@ pub struct UnityCatalog {
 
 impl UnityCatalog {
     pub async fn try_new(client: Arc<UnityClient>, catalog_name: &str) -> UnityCatalog {
-        let schemas = client.list_schemas(catalog_name).await;
+        let schemas = client.list_schemas(catalog_name).await.unwrap();
         tracing::info!("Found schemas: {:?}", schemas);
 
         let mut schema_providers = HashMap::new();

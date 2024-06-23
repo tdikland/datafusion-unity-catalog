@@ -4,7 +4,11 @@ use datafusion::catalog::{schema::SchemaProvider, CatalogProvider};
 
 use crate::{client::UnityClient, unity::UnitySchema};
 
+use super::error::UnityError;
+
 pub struct Catalog {
+    name: String,
+    client: Arc<UnityClient>,
     schemas: HashMap<String, Arc<dyn SchemaProvider>>,
 }
 
@@ -13,19 +17,24 @@ impl Catalog {
         client: Arc<UnityClient>,
         catalog_name: &str,
     ) -> Result<Catalog, UnityError> {
-        let schemas = client.list_schemas(catalog_name).await;
-        tracing::info!("Found schemas: {:?}", schemas);
+        let mut catalog = Catalog {
+            name: catalog_name.to_string(),
+            client: client.clone(),
+            schemas: HashMap::new(),
+        };
+        catalog.fetch().await?;
+        Ok(catalog)
+    }
 
-        let mut schema_providers = HashMap::new();
-        for schema in schemas.iter() {
-            let provider: Arc<dyn SchemaProvider> =
-                Arc::new(UnitySchema::try_new(client.clone(), catalog_name, &schema.name).await);
-            schema_providers.insert(schema.name.clone(), provider);
+    async fn fetch(&mut self) -> Result<(), UnityError> {
+        let schemas = self.client.list_schemas(&self.name).await?;
+        for schema in schemas {
+            let provider =
+                UnitySchema::try_new(self.client.clone(), &self.name, &schema.name).await;
+            self.schemas.insert(schema.name.clone(), Arc::new(provider));
         }
 
-        Catalog {
-            schemas: schema_providers,
-        }
+        Ok(())
     }
 }
 
