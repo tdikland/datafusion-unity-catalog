@@ -2,16 +2,20 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use datafusion::{
-    arrow::datatypes::SchemaRef,
     catalog::{schema::SchemaProvider, CatalogProvider, CatalogProviderList},
-    datasource::{TableProvider, TableType},
+    datasource::TableProvider,
     error::DataFusionError,
-    execution::context::SessionState,
-    logical_expr::Expr,
-    physical_plan::ExecutionPlan,
 };
 
-use crate::client::{DataSourceFormat, TableInfo, TableType as UcTableType, UnityClient};
+use crate::{
+    client::{DataSourceFormat, TableInfo, TableType as UcTableType, UnityClient},
+    table::UnityDeltaTable,
+};
+
+mod catalog;
+pub mod error;
+mod schema;
+pub mod unity;
 
 pub struct Unity {
     client: Arc<UnityClient>,
@@ -19,7 +23,7 @@ pub struct Unity {
 }
 
 impl Unity {
-    pub async fn new() -> Unity {
+    pub async fn try_new() -> Self {
         let client = Arc::new(UnityClient::new());
         let unity = client.list_catalogs().await;
         tracing::info!("Found catalogs: {:?}", unity);
@@ -27,9 +31,6 @@ impl Unity {
         let mut catalogs = HashMap::new();
 
         for catalog in unity.iter() {
-            if catalog.name == "test1" {
-                continue;
-            }
             let provider: Arc<dyn CatalogProvider> =
                 Arc::new(UnityCatalog::try_new(client.clone(), &catalog.name).await);
             catalogs.insert(catalog.name.clone(), provider);
@@ -96,29 +97,6 @@ impl CatalogProvider for UnityCatalog {
 
     fn schema(&self, name: &str) -> Option<Arc<dyn SchemaProvider>> {
         self.schemas.get(name).cloned()
-        // let mut tables = HashMap::new();
-        // tables.insert(
-        //     "table1".to_string(),
-        //     TableInfo {
-        //         table_id: Some(String::from("1")),
-        //         name: Some(String::from("table1")),
-        //         catalog_name: Some(String::from("table1")),
-        //         schema_name: Some(String::from("table1")),
-        //         table_type: Some(UcTableType::Managed),
-        //         data_source_format: Some(DataSourceFormat::Parquet),
-        //         columns: vec![],
-        //         storage_location: Some(String::from("table1")),
-        //         comment: Some(String::from("table1")),
-        //         properties: HashMap::new(),
-        //         created_at: None,
-        //         updated_at: None,
-        //     },
-        // );
-
-        // Some(Arc::new(UnitySchema {
-        //     client: Arc::new(UnityClient::new()),
-        //     tables: tables,
-        // }))
     }
 }
 
@@ -152,6 +130,11 @@ impl UnitySchema {
 
 #[async_trait]
 impl SchemaProvider for UnitySchema {
+    // TODO: check if schema can be derived from unity-catalog
+    fn owner_name(&self) -> Option<&str> {
+        None
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -161,38 +144,38 @@ impl SchemaProvider for UnitySchema {
     }
 
     async fn table(&self, name: &str) -> Result<Option<Arc<dyn TableProvider>>, DataFusionError> {
-        Ok(Some(Arc::new(Tab {})))
+        if name == "marksheet_uniform" {
+            return Ok(None);
+        }
+
+        if self.tables.contains_key(name) {
+            let table = self.tables.get(name).unwrap();
+            let table =
+                Arc::new(UnityDeltaTable::new(&table.storage_location.clone().unwrap()).await);
+            Ok(Some(table))
+        } else {
+            Ok(None)
+        }
     }
+
+    // TODO: overwrite default implementation
+    // fn register_table(
+    //     &self,
+    //     name: String,
+    //     table: Arc<dyn TableProvider>,
+    // ) -> Result<Option<Arc<dyn TableProvider>>, DataFusionError> {
+    //     todo!()
+    // }
+
+    // TODO: overwrite default implementation
+    // fn deregister_table(
+    //     &self,
+    //     name: &str,
+    // ) -> Result<Option<Arc<dyn TableProvider>>, DataFusionError> {
+    //     todo!()
+    // }
 
     fn table_exist(&self, name: &str) -> bool {
         self.tables.contains_key(name)
-    }
-}
-
-struct Tab {}
-
-#[async_trait]
-impl TableProvider for Tab {
-    fn as_any(&self) -> &dyn Any {
-        todo!()
-    }
-
-    /// Get a reference to the schema for this table
-    fn schema(&self) -> SchemaRef {
-        todo!()
-    }
-
-    fn table_type(&self) -> TableType {
-        TableType::Base
-    }
-
-    async fn scan(
-        &self,
-        state: &SessionState,
-        projection: Option<&Vec<usize>>,
-        filters: &[Expr],
-        limit: Option<usize>,
-    ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
-        todo!()
     }
 }

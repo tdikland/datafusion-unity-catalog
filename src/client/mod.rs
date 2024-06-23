@@ -3,6 +3,10 @@ use std::collections::HashMap;
 use reqwest::Client;
 use serde::Deserialize;
 
+use self::error::ClientError;
+
+mod error;
+
 pub struct UnityClient {
     client: Client,
 }
@@ -25,12 +29,13 @@ impl UnityClient {
             .catalogs
     }
 
-    pub async fn list_schemas(&self, catalog_name: &str) -> Vec<SchemaInfo> {
+    pub async fn list_schemas(&self, catalog_name: &str) -> Result<Vec<SchemaInfo>, ClientError> {
         let url = format!(
             "http://127.0.0.1:8080/api/2.1/unity-catalog/schemas?catalog_name={}",
             catalog_name
         );
-        self.client
+        Ok(self
+            .client
             .get(&url)
             .send()
             .await
@@ -38,7 +43,7 @@ impl UnityClient {
             .json::<ListSchemasResponse>()
             .await
             .unwrap()
-            .schemas
+            .schemas)
     }
 
     pub async fn list_tables(&self, catalog_name: &str, schema_name: &str) -> Vec<TableInfo> {

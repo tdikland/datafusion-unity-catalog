@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.80"
+dashmap = "5.5.3"
 datafusion = "39.0.0"
+deltalake = { version = "0.18.0", features = ["datafusion", "datafusion-ext"] }
 reqwest = { version = "0.12.5", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
