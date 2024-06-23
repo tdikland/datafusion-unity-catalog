@@ -16,7 +16,7 @@ mod test {
         let cfg = SessionConfig::new().with_information_schema(true);
         let mut ctx = SessionContext::new_with_config(cfg);
 
-        let unity = Arc::new(unity::Unity::new().await);
+        let unity = Arc::new(unity::Unity::try_new().await);
         ctx.register_catalog_list(unity);
 
         ctx.sql("SELECT * FROM information_schema.tables;")

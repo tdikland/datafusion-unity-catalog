@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 
 use datafusion::catalog::{schema::SchemaProvider, CatalogProvider};
 
-use crate::{client::UnityClient, unity::UnitySchema};
+use crate::{client::UnityClient, unity::schema::UnitySchema};
 
 use super::error::UnityError;
 
