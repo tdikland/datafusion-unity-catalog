@@ -4,11 +4,12 @@ use datafusion::catalog::{CatalogProvider, CatalogProviderList};
 
 use crate::{client::UnityClient, unity::catalog::Catalog};
 
+use self::error::UnityError;
+
 mod catalog;
-pub mod error;
+mod error;
 mod schema;
-pub mod table;
-// pub mod unity;
+mod table;
 
 pub struct Unity {
     client: Arc<UnityClient>,
@@ -16,23 +17,35 @@ pub struct Unity {
 }
 
 impl Unity {
-    pub async fn try_new() -> Self {
-        let client = Arc::new(UnityClient::new());
-        let unity = client.list_catalogs().await;
-        tracing::info!("Found catalogs: {:?}", unity);
+    pub async fn try_new(endpoint: &str) -> Result<Self, UnityError> {
+        let client = Arc::new(UnityClient::new(endpoint));
+        let catalogs = HashMap::new();
 
-        let mut catalogs = HashMap::new();
+        let mut unity = Self { client, catalogs };
+        unity.fetch().await?;
 
-        for catalog in unity.iter() {
-            let provider: Arc<dyn CatalogProvider> = Arc::new(
-                Catalog::try_new(client.clone(), &catalog.name)
-                    .await
-                    .unwrap(),
-            );
-            catalogs.insert(catalog.name.clone(), provider);
+        Ok(unity)
+    }
+
+    pub async fn try_new_with_client(client: UnityClient) -> Result<Self, UnityError> {
+        let client = Arc::new(client);
+        let catalogs = HashMap::new();
+
+        let mut unity = Self { client, catalogs };
+        unity.fetch().await?;
+
+        Ok(unity)
+    }
+
+    async fn fetch(&mut self) -> Result<(), UnityError> {
+        let catalogs = self.client.list_catalogs().await?;
+        for catalog in catalogs {
+            let provider = Catalog::try_new(self.client.clone(), catalog.name()).await?;
+            self.catalogs
+                .insert(catalog.name().to_owned(), Arc::new(provider));
         }
 
-        Unity { client, catalogs }
+        Ok(())
     }
 }
 

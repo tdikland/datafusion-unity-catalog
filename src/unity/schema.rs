@@ -5,14 +5,14 @@ use datafusion::{
     catalog::schema::SchemaProvider, datasource::TableProvider, error::DataFusionError,
 };
 
-use crate::{
-    client::{TableInfo, UnityClient},
-    table::UnityDeltaTable,
-};
+use super::{error::UnityError, table::delta::UnityDeltaTable};
+use crate::client::{Table, UnityClient};
 
 pub struct UnitySchema {
+    catalog_name: String,
+    name: String,
     client: Arc<UnityClient>,
-    tables: HashMap<String, TableInfo>,
+    tables: HashMap<String, Table>,
 }
 
 impl UnitySchema {
@@ -20,21 +20,28 @@ impl UnitySchema {
         client: Arc<UnityClient>,
         catalog_name: &str,
         schema_name: &str,
-    ) -> UnitySchema {
-        let tables: HashMap<String, TableInfo> = client
-            .list_tables(catalog_name, schema_name)
-            .await
-            .into_iter()
-            .map(|table| (table.name.clone().unwrap(), table))
-            .collect();
+    ) -> Result<UnitySchema, UnityError> {
+        let mut schema = Self {
+            catalog_name: catalog_name.to_owned(),
+            name: schema_name.to_owned(),
+            client: client.clone(),
+            tables: HashMap::new(),
+        };
+        schema.fetch().await?;
+        Ok(schema)
+    }
 
-        tracing::info!("Found tables: {:?}", tables);
+    async fn fetch(&mut self) -> Result<(), UnityError> {
+        let tables = self
+            .client
+            .list_tables(&self.catalog_name, &self.name)
+            .await?;
 
-        for t in tables.iter() {
-            dbg!(&t);
+        for table in tables {
+            self.tables.insert(table.name().to_owned(), table);
         }
 
-        UnitySchema { client, tables }
+        Ok(())
     }
 }
 
@@ -60,8 +67,7 @@ impl SchemaProvider for UnitySchema {
 
         if self.tables.contains_key(name) {
             let table = self.tables.get(name).unwrap();
-            let table =
-                Arc::new(UnityDeltaTable::new(&table.storage_location.clone().unwrap()).await);
+            let table = Arc::new(UnityDeltaTable::new(&table.storage_location()).await);
             Ok(Some(table))
         } else {
             Ok(None)

@@ -1,1 +1,1 @@
-mod delta;
+pub mod delta;

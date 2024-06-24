@@ -30,8 +30,9 @@ impl Catalog {
         let schemas = self.client.list_schemas(&self.name).await?;
         for schema in schemas {
             let provider =
-                UnitySchema::try_new(self.client.clone(), &self.name, &schema.name).await;
-            self.schemas.insert(schema.name.clone(), Arc::new(provider));
+                UnitySchema::try_new(self.client.clone(), &self.name, schema.name()).await?;
+            self.schemas
+                .insert(schema.name().to_owned(), Arc::new(provider));
         }
 
         Ok(())

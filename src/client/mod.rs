@@ -1,183 +1,161 @@
-use std::collections::HashMap;
-
-use reqwest::Client;
-use serde::Deserialize;
-
-use self::error::ClientError;
+use self::{error::ClientError, rest::UnityRestClient};
 
 pub mod error;
+pub mod rest;
 
 pub struct UnityClient {
-    client: Client,
+    rest_client: UnityRestClient,
 }
 
 impl UnityClient {
-    pub fn new() -> UnityClient {
-        let client = Client::new();
-        Self { client }
+    pub fn new(endpoint: &str) -> UnityClient {
+        let rest_client = UnityRestClient::new(endpoint);
+        Self { rest_client }
     }
 
-    pub async fn list_catalogs(&self) -> Vec<CatalogInfo> {
-        self.client
-            .get("http://127.0.0.1:8080/api/2.1/unity-catalog/catalogs")
-            .send()
-            .await
-            .unwrap()
-            .json::<ListCatalogsResponse>()
-            .await
-            .unwrap()
-            .catalogs
+    pub async fn list_catalogs(&self) -> Result<Vec<Catalog>, ClientError> {
+        let mut catalogs = Vec::new();
+        let mut page_token = None;
+        loop {
+            let response = self
+                .rest_client
+                .list_catalogs(page_token.as_deref(), None)
+                .await
+                .unwrap();
+            catalogs.extend(response.catalogs.into_iter().map(|c| c.name));
+            page_token = response.next_page_token;
+            if page_token.is_none() || page_token.as_ref().is_some_and(|s| s.is_empty()) {
+                let c = catalogs
+                    .into_iter()
+                    .map(|name| Catalog::new(name))
+                    .collect();
+                break Ok(c);
+            }
+        }
     }
 
-    pub async fn list_schemas(&self, catalog_name: &str) -> Result<Vec<SchemaInfo>, ClientError> {
-        let url = format!(
-            "http://127.0.0.1:8080/api/2.1/unity-catalog/schemas?catalog_name={}",
-            catalog_name
-        );
-        Ok(self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .unwrap()
-            .json::<ListSchemasResponse>()
-            .await
-            .unwrap()
-            .schemas)
+    pub async fn list_schemas(&self, catalog_name: &str) -> Result<Vec<Schema>, ClientError> {
+        let mut schemas = Vec::new();
+        let mut page_token = None;
+        loop {
+            let response = self
+                .rest_client
+                .list_schemas(catalog_name, page_token.as_deref(), None)
+                .await
+                .unwrap();
+            schemas.extend(response.schemas.into_iter().map(|s| s.name));
+            page_token = response.next_page_token;
+            if page_token.is_none() || page_token.as_ref().is_some_and(|s| s.is_empty()) {
+                let s = schemas
+                    .into_iter()
+                    .map(|name| Schema::new(catalog_name.to_string(), name))
+                    .collect();
+                break Ok(s);
+            }
+        }
     }
 
-    pub async fn list_tables(&self, catalog_name: &str, schema_name: &str) -> Vec<TableInfo> {
-        let url = format!(
-            "http://127.0.0.1:8080/api/2.1/unity-catalog/tables?catalog_name={}&schema_name={}",
-            catalog_name, schema_name
-        );
-        self.client
-            .get(&url)
-            .send()
-            .await
-            .unwrap()
-            .json::<ListTablesResponse>()
-            .await
-            .unwrap()
-            .tables
+    pub async fn list_tables(
+        &self,
+        catalog_name: &str,
+        schema_name: &str,
+    ) -> Result<Vec<Table>, ClientError> {
+        let mut tables = Vec::new();
+        let mut page_token = None;
+        loop {
+            let response = self
+                .rest_client
+                .list_tables(catalog_name, schema_name, page_token.as_deref(), None)
+                .await
+                .unwrap();
+            tables.extend(response.tables);
+            page_token = response.next_page_token;
+            if page_token.is_none() || page_token.as_ref().is_some_and(|s| s.is_empty()) {
+                let t = tables
+                    .into_iter()
+                    .map(|table_info| {
+                        Table::new(
+                            catalog_name.to_string(),
+                            schema_name.to_string(),
+                            table_info.name.expect("table name"),
+                            table_info.storage_location.expect("storage location"),
+                        )
+                    })
+                    .collect();
+                break Ok(t);
+            }
+        }
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ListCatalogsResponse {
-    pub catalogs: Vec<CatalogInfo>,
-    pub next_page_token: Option<String>,
+pub struct Catalog {
+    name: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CatalogInfo {
-    pub id: String,
-    pub name: String,
-    pub comment: Option<String>,
-    #[serde(default)]
-    pub properties: HashMap<String, String>,
-    pub created_at: Option<i64>,
-    pub updated_at: Option<i64>,
+impl Catalog {
+    pub fn new(name: String) -> Catalog {
+        Catalog { name }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ListSchemasResponse {
-    pub schemas: Vec<SchemaInfo>,
-    pub next_page_token: Option<String>,
+pub struct Schema {
+    catalog_name: String,
+    name: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SchemaInfo {
-    pub schema_id: String,
-    pub name: String,
-    pub catalog_name: Option<String>,
-    pub comment: Option<String>,
-    #[serde(default)]
-    pub properties: HashMap<String, String>,
-    pub full_name: Option<String>,
-    pub created_at: Option<i64>,
-    pub updated_at: Option<i64>,
+impl Schema {
+    pub fn new(catalog_name: String, name: String) -> Schema {
+        Schema { catalog_name, name }
+    }
+
+    pub fn catalog_name(&self) -> &str {
+        &self.catalog_name
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ListTablesResponse {
-    pub tables: Vec<TableInfo>,
-    pub next_page_token: Option<String>,
+pub struct Table {
+    catalog_name: String,
+    schema_name: String,
+    name: String,
+    storage_location: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct TableInfo {
-    pub table_id: Option<String>,
-    pub name: Option<String>,
-    pub catalog_name: Option<String>,
-    pub schema_name: Option<String>,
-    pub table_type: Option<TableType>,
-    pub data_source_format: Option<DataSourceFormat>,
-    pub columns: Vec<ColumnInfo>,
-    pub storage_location: Option<String>,
-    pub comment: Option<String>,
-    #[serde(default)]
-    pub properties: HashMap<String, String>,
-    pub created_at: Option<i64>,
-    pub updated_at: Option<i64>,
-}
+impl Table {
+    pub fn new(
+        catalog_name: String,
+        schema_name: String,
+        name: String,
+        storage_location: String,
+    ) -> Table {
+        Table {
+            catalog_name,
+            schema_name,
+            name,
+            storage_location,
+        }
+    }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum TableType {
-    Managed,
-    External,
-}
+    pub fn catalog_name(&self) -> &str {
+        &self.catalog_name
+    }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum DataSourceFormat {
-    Delta,
-    Csv,
-    Json,
-    Avro,
-    Parquet,
-    Orc,
-    Text,
-}
+    pub fn schema_name(&self) -> &str {
+        &self.schema_name
+    }
 
-#[derive(Debug, Deserialize)]
-pub struct ColumnInfo {
-    name: Option<String>,
-    type_text: Option<String>,
-    type_json: Option<String>,
-    type_name: Option<ColumnTypeName>,
-    type_precision: Option<i32>,
-    type_scale: Option<i32>,
-    type_interval_type: Option<String>,
-    position: Option<i32>,
-    comment: Option<String>,
-    nullable: bool,
-    partition_index: Option<i32>,
-}
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum ColumnTypeName {
-    Boolean,
-    Byte,
-    Short,
-    Int,
-    Long,
-    Float,
-    Double,
-    Date,
-    Timestamp,
-    TimestampNtz,
-    String,
-    Binary,
-    Decimal,
-    Interval,
-    Array,
-    Struct,
-    Map,
-    Char,
-    Null,
-    UserDefinedType,
-    TableType,
+    pub fn storage_location(&self) -> &str {
+        &self.storage_location
+    }
 }
