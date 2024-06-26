@@ -7,6 +7,7 @@ edition = "2021"
 async-trait = "0.1.80"
 dashmap = "5.5.3"
 datafusion = "39.0.0"
+delta_kernel = "0.1.1"
 deltalake = { version = "0.18.0", features = ["datafusion", "datafusion-ext"] }
 reqwest = { version = "0.12.5", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }

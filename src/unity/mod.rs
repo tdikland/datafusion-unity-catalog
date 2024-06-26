@@ -1,3 +1,5 @@
+//! Unity Calalog implementation for DataFusion
+
 use std::{any::Any, collections::HashMap, sync::Arc};
 
 use datafusion::catalog::{CatalogProvider, CatalogProviderList};
@@ -7,16 +9,32 @@ use crate::{client::UnityClient, unity::catalog::Catalog};
 use self::error::UnityError;
 
 mod catalog;
-mod error;
+pub mod error;
 mod schema;
 mod table;
 
+/// Unity Catalog
 pub struct Unity {
     client: Arc<UnityClient>,
     catalogs: HashMap<String, Arc<dyn CatalogProvider>>,
 }
 
 impl Unity {
+    /// Initialize a new [`Unity`] instance with the given endpoint.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async {
+    /// # use datafusion_unity_catalog::UnityError;
+    /// use datafusion::catalog::CatalogProviderList;
+    /// use datafusion_unity_catalog::Unity;
+    ///
+    /// let unity_catalog = Unity::try_new("http://localhost:8080/api/2.1/unity-catalog/").await?;
+    /// assert_eq!(unity_catalog.catalog_names().len(), 1);
+    /// # Ok::<(), UnityError>(()) };
+    /// # Ok(()) }
+    /// ```
     pub async fn try_new(endpoint: &str) -> Result<Self, UnityError> {
         let client = Arc::new(UnityClient::new(endpoint));
         let catalogs = HashMap::new();
@@ -27,7 +45,7 @@ impl Unity {
         Ok(unity)
     }
 
-    pub async fn try_new_with_client(client: UnityClient) -> Result<Self, UnityError> {
+    async fn _try_new_with_client(client: UnityClient) -> Result<Self, UnityError> {
         let client = Arc::new(client);
         let catalogs = HashMap::new();
 

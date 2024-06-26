@@ -1,4 +1,7 @@
-use self::{error::ClientError, rest::UnityRestClient};
+use self::{
+    error::ClientError,
+    rest::{types::TableInfo, UnityRestClient},
+};
 
 pub mod error;
 pub mod rest;
@@ -103,17 +106,20 @@ impl Catalog {
 }
 
 pub struct Schema {
-    catalog_name: String,
+    _catalog_name: String,
     name: String,
 }
 
 impl Schema {
     pub fn new(catalog_name: String, name: String) -> Schema {
-        Schema { catalog_name, name }
+        Schema {
+            _catalog_name: catalog_name,
+            name,
+        }
     }
 
-    pub fn catalog_name(&self) -> &str {
-        &self.catalog_name
+    pub fn _catalog_name(&self) -> &str {
+        &self._catalog_name
     }
 
     pub fn name(&self) -> &str {
@@ -122,8 +128,8 @@ impl Schema {
 }
 
 pub struct Table {
-    catalog_name: String,
-    schema_name: String,
+    _catalog_name: String,
+    _schema_name: String,
     name: String,
     storage_location: String,
 }
@@ -136,19 +142,19 @@ impl Table {
         storage_location: String,
     ) -> Table {
         Table {
-            catalog_name,
-            schema_name,
+            _catalog_name: catalog_name,
+            _schema_name: schema_name,
             name,
             storage_location,
         }
     }
 
-    pub fn catalog_name(&self) -> &str {
-        &self.catalog_name
+    pub fn _catalog_name(&self) -> &str {
+        &self._catalog_name
     }
 
-    pub fn schema_name(&self) -> &str {
-        &self.schema_name
+    pub fn _schema_name(&self) -> &str {
+        &self._schema_name
     }
 
     pub fn name(&self) -> &str {
@@ -157,5 +163,16 @@ impl Table {
 
     pub fn storage_location(&self) -> &str {
         &self.storage_location
+    }
+}
+
+impl From<TableInfo> for Table {
+    fn from(value: TableInfo) -> Self {
+        Table {
+            _catalog_name: value.catalog_name.expect("catalog name"),
+            _schema_name: value.schema_name.expect("schema name"),
+            name: value.name.expect("table name"),
+            storage_location: value.storage_location.expect("storage location"),
+        }
     }
 }
